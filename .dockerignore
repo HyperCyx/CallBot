@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets/host state.
+node_modules
+dist
+coverage
+.git
+.gitignore
+.github
+*.log
+.env
+.env.*
+!.env.example
+docs
+uploads
+tests
+vitest.config.ts
+*.md
+!README.md
+.DS_Store

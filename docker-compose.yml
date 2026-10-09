@@ -1,0 +1,102 @@
+# =============================================================================
+# SIP bot - local / single-host deployment
+# =============================================================================
+#   docker compose up -d --build
+#   docker compose run --rm migrate        # apply migrations (idempotent)
+#   docker compose run --rm seed           # settings + roles + starter catalogue
+#   docker compose logs -f app
+#
+# FreePBX is NOT part of this stack: it is an external system that the backend
+# calls over its GraphQL API (and AMI). Point FREEPBX_* at your PBX.
+# =============================================================================
+
+name: sipbot
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sipbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sipbot}
+      # Deterministic collation for indexes on numbers/codes.
+      LANG: C.UTF-8
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-sipbot} -d ${POSTGRES_DB:-sipbot}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not published by default: only the app/worker need it. Uncomment to run
+    # migrations or psql from the host.
+    # ports:
+    #   - '127.0.0.1:5432:5432'
+
+  migrate:
+    build: .
+    profiles: ['tools']
+    command: ['npx', 'tsx', 'scripts/migrate.ts']
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sipbot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sipbot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  seed:
+    build: .
+    profiles: ['tools']
+    command: ['npx', 'tsx', 'scripts/seed.ts']
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sipbot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sipbot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-sipbot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sipbot}
+      # Migrations are applied on boot by src/index.ts (checksum verified).
+      RUN_MIGRATIONS_ON_START: 'true'
+    ports:
+      - '${API_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # The API is the only network-facing component; it terminates nothing
+    # itself, so put a TLS reverse proxy in front of it in production
+    # (see docs/06-deployment.md).
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ['node', 'dist/worker.js']
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-sipbot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sipbot}
+      # Only the app runs HTTP; the worker owns AMI, CDR, reconciliation and jobs.
+      AMI_ENABLED: ${AMI_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  pgdata:

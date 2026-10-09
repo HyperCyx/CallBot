@@ -1,0 +1,46 @@
+{
+  "name": "sipbot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-user SIP/DID management platform controlled through a Telegram bot, backed by PostgreSQL and FreePBX/Asterisk",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
+    "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:db": "tsx scripts/test-db.ts",
+    "test:integration": "vitest run tests",
+    "probe": "tsx scripts/probe.ts",
+    "reconcile": "tsx scripts/reconcile.ts"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "grammy": "^1.30.0",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "telegram": "^2.26.22",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

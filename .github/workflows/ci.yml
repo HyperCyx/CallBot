@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static checks: types + migration integrity. Fast feedback, no database.
+  # ---------------------------------------------------------------------------
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  # ---------------------------------------------------------------------------
+  # Integration tests against a real PostgreSQL 17 instance.
+  #
+  # The guarantees under test - SELECT ... FOR UPDATE SKIP LOCKED, the partial
+  # unique index that makes double assignment impossible, the append-only audit
+  # trigger, the hash chain - only exist in PostgreSQL, so there is no in-memory
+  # substitute here.
+  # ---------------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sipbot
+          POSTGRES_PASSWORD: sipbot
+          POSTGRES_DB: sipbot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sipbot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://sipbot:sipbot@127.0.0.1:5432/sipbot_test
+      TEST_DATABASE_URL: postgres://sipbot:sipbot@127.0.0.1:5432/sipbot_test
+      API_KEY: ci-api-key-not-a-placeholder
+      SIGNING_KEY: ci-signing-key-not-a-placeholder
+      SECRETS_KEK_BASE64: Y2ktZW5jcnlwdGlvbi1rZXktMzItYnl0ZXMtbWluaW11bSEh
+      FREEPBX_MODE: mock
+      AMI_ENABLED: 'false'
+      TELEGRAM_BOT_TOKEN: ''
+      LOG_LEVEL: silent
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Verify migrations are idempotent
+        run: npm run migrate && npm run migrate
+      - name: Seed is idempotent
+        run: npm run seed && npm run seed
+
+  # ---------------------------------------------------------------------------
+  # Docker image builds (compose config lint + image build).
+  # ---------------------------------------------------------------------------
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config > /dev/null
+        env:
+          POSTGRES_PASSWORD: ci
+      - run: docker build -t sipbot:ci .
