@@ -2,8 +2,15 @@ node_modules/
 dist/
 coverage/
 *.log
+
+# Local configuration and credentials. Keep the documented template tracked.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Generated database exports and local recovery data.
+/backups/
+*.dump
+
 .DS_Store
 *.tsbuildinfo

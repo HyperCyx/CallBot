@@ -11,6 +11,8 @@ coverage
 !.env.example
 docs
 uploads
+backups
+*.dump
 tests
 vitest.config.ts
 *.md
